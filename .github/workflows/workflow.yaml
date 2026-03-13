@@ -1,0 +1,52 @@
+---
+name: 'Build Docker images'
+on:
+  create:
+  workflow_dispatch:
+jobs:
+  build-and-push:
+    name: 'Build & Push'
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { pg-major-version: '17', pg-version: '17.9' }
+          - { pg-major-version: '18', pg-version: '18.3' }
+    steps:
+      - name: 'Check out code'
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: 'Get latest tag'
+        id: get-latest-tag
+        uses: WyriHaximus/github-action-get-previous-tag@v2
+
+      - name: 'Set up Docker BuildX'
+        uses: docker/setup-buildx-action@v4
+        with:
+          version: latest
+
+      - name: 'Log into GitHub Container Registry'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 'Build and push images'
+        uses: docker/build-push-action@v7
+        with:
+          platforms: linux/amd64
+          build-args: |
+            PG_VERSION=${{ matrix.pg-version }}
+            PG_MAJOR_VERSION=${{ matrix.pg-major-version }}
+            VERSION=${{ steps.get-latest-tag.outputs.tag }}
+          context: .
+          file: ./pg${{ matrix.pg-major-version }}/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/robmeijer/postgres-flex:${{ matrix.pg-major-version }}
+            ghcr.io/robmeijer/postgres-flex:${{ matrix.pg-version }}
